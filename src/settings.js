@@ -1,6 +1,5 @@
 module.exports = {
-
-  title: 'QN Online Code Judge',
+  title: "QN Online Code Judge",
 
   /**
    * @type {boolean} true | false
@@ -12,5 +11,5 @@ module.exports = {
    * @type {boolean} true | false
    * @description Whether show the logo in sidebar
    */
-  sidebarLogo: false
-}
+  sidebarLogo: true,
+};

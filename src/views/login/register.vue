@@ -21,7 +21,8 @@
                   auto-complete="on" />
       </el-form-item>
 
-      <el-form-item prop="email">
+      <el-form-item prop="email"
+                    class="email-item">
         <span class="svg-container"><svg-icon icon-class="email" /></span>
         <el-input ref="email"
                   v-model="registerForm.email"
@@ -29,6 +30,24 @@
                   placeholder="邮箱"
                   type="text"
                   tabindex="2"
+                  auto-complete="on"
+                  class="email-input" />
+
+        <el-button :disabled="isCounting"
+                   class="send-button"
+                   @click="handleSendCode">
+          {{ buttonText }}
+        </el-button>
+      </el-form-item>
+
+      <el-form-item prop="verifyCode">
+        <span class="svg-container"><svg-icon icon-class="example" /></span>
+        <el-input ref="verifyCode"
+                  v-model="registerForm.verifyCode"
+                  name="verifyCode"
+                  placeholder="验证码"
+                  type="text"
+                  tabindex="3"
                   auto-complete="on" />
       </el-form-item>
 
@@ -40,7 +59,7 @@
                   name="password"
                   placeholder="密码"
                   :type="passwordType"
-                  tabindex="3"
+                  tabindex="4"
                   auto-complete="on" />
         <span class="show-pwd"
               @click="showPwd">
@@ -55,7 +74,7 @@
                   name="confirmation"
                   placeholder="确认密码"
                   type="password"
-                  tabindex="4"
+                  tabindex="5"
                   auto-complete="on"
                   @keyup.enter.native="handleRegister" />
       </el-form-item>
@@ -72,10 +91,14 @@
 
 <script>
 import {
+  isValidCode,
   isValidEmail,
   isValidPassword,
   isValidUsername
 } from '@/utils/validate'
+import User from '@/entity/User'
+import { register, getPublicKey, sendVerification, checkEmail, checkUsername } from '@/api/account'
+import JSEncrypt from 'jsencrypt'
 
 export default {
   name: 'Register',
@@ -83,24 +106,53 @@ export default {
     const validateUsername = (rule, value, callback) => {
       if (!isValidUsername(value) || value == null) {
         callback(new Error('用户名只能由数字、字母、下划线组成'))
-      } else {
-        callback()
+        return
       }
+
+      checkUsername(value).then((response) => {
+        if (response.data === false) {
+          callback(new Error('用户名已存在'))
+          return
+        }
+      })
+
+      callback()
     }
 
     const validateEmail = (rule, value, callback) => {
-      if (!isValidEmail(value)) {
-        callback(new Error('请输入正确的邮箱'))
-      } else {
-        callback()
+      if (!value) {
+        callback(new Error('请输入邮箱'))
+        this.isEmailAvailable = false
+        return
       }
+
+      if (!isValidEmail(value)) {
+        callback(new Error('邮箱格式不正确'))
+        this.isEmailAvailable = false
+        return
+      }
+
+      this.emailCheckLoading = true
+      checkEmail(value).then(response => {
+        this.isEmailAvailable = response.data
+        if (!response.data) {
+          callback(new Error('该邮箱已被注册'))
+        } else {
+          callback() // 验证通过
+        }
+      })
+        .catch(error => {
+          callback(new Error('邮箱验证失败'))
+        }).finally(() => {
+          this.emailCheckLoading = false
+        })
     }
 
     const validatePassword = (rule, value, callback) => {
       if (value == null) {
         callback(new Error('密码不能为空'))
       } else if (!isValidPassword(value)) {
-        callback(new Error('密码格式错误'))
+        callback(new Error('密码格式错误，8-20字符'))
       } else {
         callback()
       }
@@ -114,10 +166,25 @@ export default {
       }
     }
 
+    const validateCode = (rule, value, callback) => {
+      if (value == null) {
+        callback(new Error('验证码不能为空'))
+        return
+      }
+
+      if (!isValidCode(value)) {
+        callback(new Error('验证码格式错误'))
+        return
+      }
+
+      callback()
+    }
+
     return {
       registerForm: {
         username: undefined,
         email: undefined,
+        verifyCode: undefined,
         password: undefined,
         confirmation: undefined
       },
@@ -131,11 +198,34 @@ export default {
         ],
         confirmation: [
           { required: true, trigger: 'blur', validator: validateConfirm }
+        ],
+        verifyCode: [
+          { required: true, trigger: 'blur', validator: validateCode }
         ]
       },
       passwordType: 'password',
-      loading: false
+      loading: false,
+      isEmailAvailable: false,
+      emailCheckLoading: false,
+      countdown: 0,
+      timer: null
     }
+  },
+
+  computed: {
+    isCounting () {
+      return this.countdown > 0
+    },
+    buttonText () {
+      return this.countdown > 0
+        ? `${this.countdown}s`
+        : '发送验证码'
+    }
+  },
+
+  beforeDestroy () {
+    // 组件销毁时清除定时器
+    if (this.timer) clearInterval(this.timer)
   },
 
   methods: {
@@ -154,14 +244,22 @@ export default {
       this.$refs.registerForm.validate((valid) => {
         if (valid) {
           this.loading = true
-          this.$store
-            .dispatch('account/register', {
-              email: this.registerForm.email,
-              username: this.registerForm.username,
-              password: this.registerForm.password
-            })
+          const user = new User(
+            this.registerForm.email,
+            this.registerForm.username,
+            this.registerForm.password
+          )
+          const code = this.registerForm.verifyCode
+
+          getPublicKey().then((response) => {
+            const encryptor = new JSEncrypt()
+            encryptor.setPublicKey(response.data)
+            user.password = encryptor.encrypt(user.password)
+            return register(user, code)
+          })
             .then(() => {
               this.loading = false
+              this.$message.success('注册成功')
               this.$router.back()
             })
             .catch((error) => {
@@ -173,9 +271,37 @@ export default {
           return false
         }
       })
+    },
+
+    async handleSendCode () {
+      try {
+        if (!this.isEmailAvailable) {
+          this.$message.error('请输入有效邮箱地址')
+          return
+        }
+
+        await sendVerification(this.registerForm.email)
+        this.$message.success('验证码已发送')
+
+        // 开始倒计时
+        this.startCountdown()
+      } catch (error) {
+        this.$message.error(error.message)
+      }
+    },
+
+    startCountdown () {
+      this.countdown = 60
+      this.timer = setInterval(() => {
+        this.countdown--
+        if (this.countdown <= 0) {
+          clearInterval(this.timer)
+        }
+      }, 1000)
     }
   }
 }
+
 </script>
 
 <style lang="scss">
@@ -252,5 +378,56 @@ $cursor: #fff;
     width: 30px;
     display: inline-block;
   }
+}
+</style>
+
+<style scoped>
+.email-item {
+  /* 表单项容器设置为相对定位 */
+  position: relative;
+  margin-bottom: 22px;
+}
+
+/* 输入框样式 */
+.email-item .email-input {
+  width: calc(100% - 140px);
+  height: 48px;
+  padding-left: 30px;
+}
+
+.email-item .svg-container {
+  position: absolute;
+  left: 0px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 2;
+  color: #889aa4;
+}
+
+/* 发送按钮样式 */
+.email-item .send-button {
+  position: absolute;
+  right: 0;
+  width: 130px;
+  height: 48px;
+  background: #fff !important;
+  border: 1px solid #dcdfe6;
+  color: #606266;
+  border-radius: 0 4px 4px 0;
+  transition: all 0.3s;
+}
+
+/* 按钮禁用状态 */
+.email-item .send-button.is-disabled {
+  opacity: 0.7;
+  background: #f5f7fa !important;
+}
+
+/* 输入框聚焦时联动按钮边框 */
+.email-item .el-input.is-active .el-input__inner {
+  border-color: #409eff;
+}
+.email-item .el-input.is-active + .send-button {
+  border-left-color: #409eff;
 }
 </style>

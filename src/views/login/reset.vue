@@ -10,7 +10,8 @@
         <h3 class="title">Reset your password</h3>
       </div>
 
-      <el-form-item prop="email">
+      <el-form-item prop="email"
+                    class="email-item">
         <span class="svg-container"><svg-icon icon-class="email" /></span>
         <el-input ref="email"
                   v-model="form.email"
@@ -18,6 +19,24 @@
                   placeholder="邮箱"
                   type="text"
                   tabindex="1"
+                  auto-complete="on"
+                  class="email-input" />
+
+        <el-button :disabled="isCounting"
+                   class="send-button"
+                   @click="handleSendCode">
+          {{ buttonText }}
+        </el-button>
+      </el-form-item>
+
+      <el-form-item prop="verifyCode">
+        <span class="svg-container"><svg-icon icon-class="example" /></span>
+        <el-input ref="verifyCode"
+                  v-model="form.verifyCode"
+                  name="verifyCode"
+                  placeholder="验证码"
+                  type="text"
+                  tabindex="2"
                   auto-complete="on" />
       </el-form-item>
 
@@ -27,9 +46,9 @@
                   :key="passwordType"
                   v-model="form.password"
                   name="password"
-                  placeholder="密码"
+                  placeholder="新密码"
                   :type="passwordType"
-                  tabindex="2"
+                  tabindex="3"
                   auto-complete="on" />
         <span class="show-pwd"
               @click="showPwd">
@@ -44,7 +63,7 @@
                   name="confirmation"
                   placeholder="确认密码"
                   type="password"
-                  tabindex="3"
+                  tabindex="4"
                   auto-complete="on"
                   @keyup.enter.native="handleReset" />
       </el-form-item>
@@ -61,16 +80,40 @@
 
 <script>
 import { isValidEmail, isValidPassword } from '@/utils/validate'
+import { resetPassword, sendVerification, checkEmail, getPublicKey } from '@/api/account'
+import User from '@/entity/User'
+import JSEncrypt from 'jsencrypt'
 
 export default {
   name: 'Reset',
   data () {
     const validateEmail = (rule, value, callback) => {
-      if (!isValidEmail(value)) {
-        callback(new Error('请输入正确的邮箱'))
-      } else {
-        callback()
+      if (!value) {
+        callback(new Error('请输入邮箱'))
+        this.isEmailAvailable = false
+        return
       }
+
+      if (!isValidEmail(value)) {
+        callback(new Error('邮箱格式不正确'))
+        this.isEmailAvailable = false
+        return
+      }
+
+      this.emailCheckLoading = true
+      checkEmail(value).then(response => {
+        this.isEmailAvailable = response.data
+        if (!response.data) {
+          callback(new Error('该邮箱已被注册'))
+        } else {
+          callback() // 验证通过
+        }
+      })
+        .catch(error => {
+          callback(new Error('邮箱验证失败'))
+        }).finally(() => {
+          this.emailCheckLoading = false
+        })
     }
 
     const validatePassword = (rule, value, callback) => {
@@ -94,6 +137,7 @@ export default {
     return {
       form: {
         email: undefined,
+        code: undefined,
         password: undefined,
         confirmation: undefined
       },
@@ -107,9 +151,30 @@ export default {
         ]
       },
       passwordType: 'password',
-      loading: false
+      loading: false,
+      isEmailAvailable: false,
+      emailCheckLoading: false,
+      countdown: 0,
+      timer: null
     }
   },
+
+  computed: {
+    isCounting () {
+      return this.countdown > 0
+    },
+    buttonText () {
+      return this.countdown > 0
+        ? `(${this.countdown}s)`
+        : '发送验证码'
+    }
+  },
+
+  beforeDestroy () {
+    // 组件销毁时清除定时器
+    if (this.timer) clearInterval(this.timer)
+  },
+
   methods: {
     showPwd () {
       if (this.passwordType === 'password') {
@@ -126,11 +191,20 @@ export default {
       this.$refs.form.validate((valid) => {
         if (valid) {
           this.loading = true
-          this.$store
-            .dispatch('account/resetPassword', {
-              email: this.form.email,
-              password: this.form.password
-            })
+          const user = new User(
+            this.form.email,
+            null,
+            this.form.password
+          )
+          const code = this.form.code
+
+          getPublicKey().then((response) => {
+            const encryptor = new JSEncrypt()
+            encryptor.setPublicKey(response.data)
+            user.password = encryptor.encrypt(user.password)
+            return resetPassword(user, code)
+          })
+
             .then(() => {
               this.loading = false
               this.$router.back()
@@ -144,6 +218,33 @@ export default {
           return false
         }
       })
+    },
+
+    async handleSendCode () {
+      try {
+        if (!this.isEmailAvailable) {
+          this.$message.error('请输入有效邮箱地址')
+          return
+        }
+
+        await sendVerification(this.registerForm.email)
+        this.$message.success('验证码已发送')
+
+        // 开始倒计时
+        this.startCountdown()
+      } catch (error) {
+        this.$message.error(error.message)
+      }
+    },
+
+    startCountdown () {
+      this.countdown = 60
+      this.timer = setInterval(() => {
+        this.countdown--
+        if (this.countdown <= 0) {
+          clearInterval(this.timer)
+        }
+      }, 1000)
     }
   }
 }
@@ -223,5 +324,56 @@ $cursor: #fff;
     width: 30px;
     display: inline-block;
   }
+}
+</style>
+
+<style scoped>
+.email-item {
+  /* 表单项容器设置为相对定位 */
+  position: relative;
+  margin-bottom: 22px;
+}
+
+/* 输入框样式 */
+.email-item .email-input {
+  width: calc(100% - 140px);
+  height: 48px;
+  padding-left: 30px;
+}
+
+.email-item .svg-container {
+  position: absolute;
+  left: 0px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 2;
+  color: #889aa4;
+}
+
+/* 发送按钮样式 */
+.email-item .send-button {
+  position: absolute;
+  right: 0;
+  width: 130px;
+  height: 48px;
+  background: #fff !important;
+  border: 1px solid #dcdfe6;
+  color: #606266;
+  border-radius: 0 4px 4px 0;
+  transition: all 0.3s;
+}
+
+/* 按钮禁用状态 */
+.email-item .send-button.is-disabled {
+  opacity: 0.7;
+  background: #f5f7fa !important;
+}
+
+/* 输入框聚焦时联动按钮边框 */
+.email-item .el-input.is-active .el-input__inner {
+  border-color: #409eff;
+}
+.email-item .el-input.is-active + .send-button {
+  border-left-color: #409eff;
 }
 </style>

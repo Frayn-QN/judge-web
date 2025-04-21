@@ -43,6 +43,11 @@
         </span>
       </el-form-item>
 
+      <el-checkbox v-model="loginForm.remember"
+                   class="remember">
+        <span class="remember-text">记住密码</span>
+      </el-checkbox>
+
       <el-button :loading="loading"
                  type="primary"
                  style="width: 100%; margin-bottom: 30px"
@@ -50,6 +55,7 @@
         登录
       </el-button>
     </el-form>
+
     <div class="link-container">
       <el-link type="primary"
                @click.native.prevent="toRegister">
@@ -92,7 +98,8 @@ export default {
     return {
       loginForm: {
         email: undefined,
-        password: undefined
+        password: undefined,
+        remember: false
       },
       loginRules: {
         email: [{ required: true, trigger: 'blur', validator: validateEmail }],
@@ -129,9 +136,9 @@ export default {
       this.$refs.loginForm.validate((valid) => {
         if (valid) {
           this.loading = true
-          // 对应@/store/account
+          // 对应@/store/user
           this.$store
-            .dispatch('account/login', this.loginForm)
+            .dispatch('user/login', this.loginForm)
             .then(() => {
               this.$router.push({ path: this.redirect || '/' })
               this.loading = false
@@ -160,9 +167,6 @@ export default {
 </script>
 
 <style lang="scss">
-/* 修复input 背景不协调 和光标变色 */
-/* Detail see https://github.com/PanJiaChen/vue-element-admin/pull/927 */
-
 $bg: #283443;
 $light_gray: #fff;
 $cursor: #fff;
@@ -266,6 +270,10 @@ $light_gray: #eee;
     justify-content: center;
     height: 16px;
     margin: 0 15px;
+  }
+
+  .remember {
+    margin: 0 0 20px 10px;
   }
 }
 </style>
