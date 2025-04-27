@@ -131,8 +131,32 @@ export default {
       return hasVerilog ? !isVerilog : isVerilog
     },
 
+    isFileNameDuplicate (fileName, fileList) {
+      return fileList.some(file => file.fileName === fileName)
+    },
+
     handleAddExample (file) {
+      if (this.isFileNameDuplicate(file.fileName, this.formData.example)) {
+        this.$message.error('存在重复文件')
+        return
+      }
       this.formData.example.push(file)
+    },
+
+    handleAddExpectation (file) {
+      if (this.isFileNameDuplicate(file.fileName, this.formData.expectation)) {
+        this.$message.error('存在重复文件')
+        return
+      }
+      this.formData.expectation.push(file)
+    },
+
+    handleAddExtra (file) {
+      if (this.isFileNameDuplicate(file.fileName, this.formData.extra)) {
+        this.$message.error('存在重复文件')
+        return
+      }
+      this.formData.extra.push(file)
     },
 
     handleRemoveExample (fileName) {
@@ -141,18 +165,10 @@ export default {
       )
     },
 
-    handleAddExpectation (file) {
-      this.formData.expectation.push(file)
-    },
-
     handleRemoveExpectation (fileName) {
       this.formData.expectation = this.formData.expectation.filter(
         f => f.fileName !== fileName
       )
-    },
-
-    handleAddExtra (file) {
-      this.formData.extra.push(file)
     },
 
     handleRemoveExtra (fileName) {
@@ -161,23 +177,74 @@ export default {
       )
     },
 
+    formatFileList (files) {
+      return files.map(file => ({
+        [file.fileName]: file.content
+      }))
+    },
+
     handleSubmit () {
       this.$refs.form.validate(valid => {
         if (valid) {
+          // 提取文件名并验证对应关系
+          const exampleNames = this.formData.example.map(f =>
+            f.fileName.replace(/\.in$/, '')
+          ).sort()
+          const expectationNames = this.formData.expectation.map(f =>
+            f.fileName.replace(/\.out$/, '')
+          ).sort()
+
+          // 检查名称匹配
+          if (exampleNames.length !== expectationNames.length ||
+            !this.areNamesEqual(exampleNames, expectationNames)) {
+            this.$message.error('测试用例和预期输出文件不匹配')
+            return
+          }
+
+          // 创建副本以避免修改原始数据
+          const processedExample = this.processFiles(
+            this.formData.example, '.in', exampleNames
+          )
+          const processedExpectation = this.processFiles(
+            this.formData.expectation, '.out', expectationNames
+          )
+
+          // 构建提交数据
           const submitData = {
             ...this.formData,
-            example: this.formatFileList(this.formData.example),
-            expectation: this.formatFileList(this.formData.expectation),
+            testCount: exampleNames.length,
+            example: this.formatFileList(processedExample),
+            expectation: this.formatFileList(processedExpectation),
             extra: this.formatFileList(this.formData.extra)
           }
+
           this.$emit('submit', submitData)
         }
       })
     },
 
-    formatFileList (files) {
-      return files.map(file => ({
-        [file.fileName]: file.content
+    // 辅助方法：验证名称列表是否一致
+    areNamesEqual (a, b) {
+      return a.length === b.length &&
+        a.every((name, idx) => name === b[idx])
+    },
+
+    // 辅助方法：处理文件排序和重命名
+    processFiles (files, ext, sortedNames) {
+      // 创建文件副本
+      const filesCopy = files.map(f => ({ ...f }))
+
+      // 按原始名称排序
+      filesCopy.sort((f1, f2) => {
+        const name1 = f1.fileName.replace(ext, '')
+        const name2 = f2.fileName.replace(ext, '')
+        return sortedNames.indexOf(name1) - sortedNames.indexOf(name2)
+      })
+
+      // 重新编号文件名
+      return filesCopy.map((f, idx) => ({
+        ...f,
+        fileName: `${idx + 1}${ext}`
       }))
     }
   }

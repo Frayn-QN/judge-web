@@ -101,7 +101,7 @@ export default {
 
     async handleSubmit (task) {
       try {
-        const taskID = await addTask(task)
+        const taskID = (await addTask(task)).data
         this.$message.success('提交成功！即将跳转评测页面')
         this.$router.push(`/task/${taskID}`)
       } catch (error) {

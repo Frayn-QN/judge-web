@@ -21,23 +21,32 @@
             {{ task.status }}
           </el-tag>
         </div>
+        <div>
+          <el-button v-if="shouldConnectWebSocket"
+                     type="danger"
+                     size="small"
+                     :loading="deleteLoading"
+                     @click="handleDelete">
+            删除记录
+          </el-button>
+        </div>
       </template>
-
-      <el-descriptions :column="2"
-                       border>
-        <el-descriptions-item label="判题时间"
-                              width="200">
-          {{ formatISO(task.judgeTime) }}
-        </el-descriptions-item>
-        <el-descriptions-item label="得分">
-          {{ task.score || 0 }}
-        </el-descriptions-item>
-        <el-descriptions-item label="详细结果"
-                              :span="2">
-          <pre class="result-pre">{{ formattedResult }}</pre>
-        </el-descriptions-item>
-      </el-descriptions>
     </el-card>
+
+    <el-descriptions :column="2"
+                     border>
+      <el-descriptions-item label="判题时间"
+                            width="200">
+        {{ formatISO(task.judgeTime) }}
+      </el-descriptions-item>
+      <el-descriptions-item label="得分">
+        {{ task.score || 0 }}
+      </el-descriptions-item>
+      <el-descriptions-item label="详细结果"
+                            :span="2">
+        <pre class="result-pre">{{ formattedResult }}</pre>
+      </el-descriptions-item>
+    </el-descriptions>
 
     <!-- 代码展示区域 -->
     <el-card class="code-card">
@@ -63,11 +72,13 @@
   </div>
 </template>
 
-  <script>
-import { getTask } from '@/api/task'
+<script>
+import { getTask, deleteTask } from '@/api/task'
 import { TaskStatus, Language } from '@/entity/enums'
 import { getStatusType } from '@/utils/page'
 import { formatISO } from '@/utils'
+import SockJS from 'sockjs-client'
+import { Client } from '@stomp/stompjs'
 
 const LANGUAGE_COLORS = {
   [Language.C]: '#555555',
@@ -87,14 +98,19 @@ export default {
         problemID: '',
         answer: {
           language: '',
-          code: ''
+          code: '',
+          judge: true
         },
         serial: 0,
         judgeTime: '',
         status: '',
         score: '',
         result: undefined
-      }
+      },
+      deleteLoading: false,
+      stompClient: null,
+      reconnectAttempts: 0,
+      maxReconnectAttempts: 5
     }
   },
   computed: {
@@ -115,7 +131,9 @@ export default {
   },
   created () {
     this.fetchTaskData()
-    this.setupWebSocketHandlers()
+  },
+  beforeUnmount () {
+    this.disconnectWebSocket()
   },
   methods: {
     getStatusType,
@@ -126,8 +144,8 @@ export default {
         const res = await getTask(this.taskID)
         this.task = res.data
 
-        // 根据状态判断是否需要连接WebSocket
-        if ([TaskStatus.COMPILING, TaskStatus.EXECUTING].includes(this.task.status)) {
+        // 根据状态动态管理WebSocket连接
+        if (this.shouldConnectWebSocket()) {
           this.connectWebSocket()
         }
       } catch (error) {
@@ -138,17 +156,93 @@ export default {
 
     // WebSocket连接
     connectWebSocket () {
-      console.log('需要建立WebSocket连接，当前状态:', this.task.status)
-      // TODO: 实现WebSocket连接逻辑
+      if (this.stompClient?.connected) return
+
+      const socket = new SockJS('/ws-task')
+      this.stompClient = new Client({
+        webSocketFactory: () => socket,
+        reconnectDelay: 5000,
+        heartbeatIncoming: 4000,
+        heartbeatOutgoing: 4000,
+        onConnect: this.handleWebSocketConnect,
+        onStompError: this.handleWebSocketError
+      })
+
+      this.stompClient.activate()
     },
 
-    // WebSocket处理
-    setupWebSocketHandlers () {
-      // TODO: 实现WebSocket事件处理
+    // WebSocket连接成功
+    handleWebSocketConnect () {
+      this.reconnectAttempts = 0
+      const subscribePath = `/topic/task/${this.taskID}`
+
+      this.stompClient.subscribe(subscribePath, message => {
+        const updateData = JSON.parse(message.body)
+        this.handleStatusUpdate(updateData)
+      })
+    },
+
+    // 状态更新处理
+    handleStatusUpdate (updateData) {
+      // 深度合并更新（保留未变更字段）
+      this.task = {
+        ...this.task,
+        ...updateData,
+        answer: { ...this.task.answer, ...updateData.answer }
+      }
+
+      // 状态完成后断开连接
+      if (!this.shouldConnectWebSocket()) {
+        this.disconnectWebSocket()
+      }
+    },
+
+    // 判断是否需要保持连接
+    shouldConnectWebSocket () {
+      return [
+        TaskStatus.COMPILING,
+        TaskStatus.EXECUTING
+      ].includes(this.task.status)
+    },
+
+    // 错误处理与重连
+    handleWebSocketError (error) {
+      console.error('WebSocket连接错误:', error)
+      if (this.reconnectAttempts++ < this.maxReconnectAttempts) {
+        setTimeout(() => this.connectWebSocket(), 2000)
+      }
+    },
+
+    // 断开连接清理资源
+    disconnectWebSocket () {
+      if (this.stompClient?.connected) {
+        this.stompClient.deactivate()
+      }
+      this.stompClient = null
     },
 
     navigateToProblem () {
       this.$router.push(`/problem/${this.task.problemID}`)
+    },
+
+    async handleDelete () {
+      try {
+        this.$confirm('此操作将永久删除该评测记录，是否继续？', '警告', {
+          type: 'warning',
+          confirmButtonText: '确认删除',
+          cancelButtonText: '取消',
+          center: true
+        }).then(async () => {
+          this.deleteLoading = true
+          await deleteTask(this.task.id)
+          this.$message.success('删除成功')
+          this.$router.replace('/task') // 跳转到任务列表
+        })
+      } catch (error) {
+        this.$message.error(`删除失败: ${error.message}`)
+      } finally {
+        this.deleteLoading = false
+      }
     }
   }
 }
@@ -190,6 +284,13 @@ export default {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 12px;
+}
+
+.status-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .result-pre {

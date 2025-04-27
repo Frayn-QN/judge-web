@@ -62,7 +62,7 @@ import { getHistory } from '@/api/task'
 import { getStatusType } from '@/utils/page'
 
 export default {
-  name: 'HistoryList',
+  name: 'TaskList',
   filters: {
     dateFormat (val) {
       return val ? new Date(val).toLocaleString() : ''
