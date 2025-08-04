@@ -36,7 +36,7 @@ export default {
   },
   data () {
     return {
-      title: '青鸟在线代码测评系统',
+      title: '在线代码测评系统',
       logo: require('@/assets/bird.png')
     }
   }

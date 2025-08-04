@@ -44,11 +44,8 @@ export default {
     }
   },
   methods: {
-    async handleSubmit (rawFormData) {
+    async handleSubmit (formData) {
       try {
-        const { isValid, formData } = this.validateSubmission(rawFormData)
-        if (!isValid) return
-
         this.loading = true
         await addProblem({
           ...formData,
@@ -63,55 +60,6 @@ export default {
       } finally {
         this.loading = false
       }
-    },
-
-    validateSubmission (rawData) {
-      // 文件校验逻辑
-      const { example, expectation } = rawData
-
-      // 检查文件数量匹配
-      if (example.length !== expectation.length) {
-        this.$message.error(`测试用例（${example.length}）与预期输出（${expectation.length}）数量不匹配`)
-        return { isValid: false }
-      }
-
-      // 检查文件名匹配
-      const expectationFiles = new Set(expectation.map(f =>
-        f.fileName.replace(/\.out$/i, '')
-      ))
-
-      const unmatched = example.filter(f =>
-        !expectationFiles.has(f.fileName.replace(/\.in$/i, ''))
-      )
-
-      if (unmatched.length > 0) {
-        this.$message.error(`发现${unmatched.length}个未匹配的测试用例`)
-        return { isValid: false }
-      }
-
-      // 排序
-      const sortedPairs = example
-        .map((inFile, index) => ({
-          inFile: { ...inFile, fileName: `${index + 1}.in` },
-          outFile: {
-            ...expectation[index],
-            fileName: `${index + 1}.out`
-          }
-        }))
-
-      return {
-        isValid: true,
-        formData: {
-          ...rawData,
-          testCount: sortedPairs.length,
-          example: this.formatFiles(sortedPairs.map(p => p.inFile)),
-          expectation: this.formatFiles(sortedPairs.map(p => p.outFile))
-        }
-      }
-    },
-
-    formatFiles (files) {
-      return files.map(f => ({ [f.fileName]: f.content }))
     }
   }
 }

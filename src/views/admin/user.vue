@@ -1,4 +1,3 @@
-<!-- 父组件 ParentPage.vue -->
 <template>
   <div class="parent-container">
     <!-- 搜索区域 -->
@@ -24,22 +23,28 @@
                show-pagination
                @page-change="handlePageChange"
                @refresh="fetchUserData"
-               @ban="handleBanAction" />
+               @ban="handleBanAction"
+               @authority="handleAuthorityAction" />
 
     <!-- 封禁弹窗 -->
     <ban-dialog ref="banDialog"
                 @ban="handleBanSubmit" />
+
+    <!-- 权限修改弹窗 -->
+    <authority-dialog ref="permDialog"
+                      @submit="handleAuthoritySubmit" />
   </div>
 </template>
 
-  <script>
-import { banUser, getBanTime, loadUser, searchUser } from '@/api/user'
+<script>
+import { banUser, getBanTime, loadUser, searchUser, changeUserAuth } from '@/api/user'
 import UserList from '@/components/List/UserList.vue'
 import BanDialog from './BanDialog.vue'
 import Page from '@/entity/Page'
+import AuthorityDialog from './AuthorityDialog.vue'
 
 export default {
-  components: { UserList, BanDialog },
+  components: { UserList, BanDialog, AuthorityDialog },
   data () {
     return {
       keyword: '',
@@ -96,6 +101,24 @@ export default {
       } catch (error) {
         console.error('封禁失败:', error)
         this.$message.error('操作失败！')
+      }
+    },
+
+    // 权限修改处理
+    handleAuthorityAction (userID) {
+      const user = this.userData.find(u => u.id === userID)
+      this.$refs.permDialog.open(user)
+    },
+
+    // 处理权限提交
+    async handleAuthoritySubmit (userID, authority) {
+      try {
+        await changeUserAuth(userID, authority)
+        this.$message.success('权限更新成功')
+        this.fetchUserData() // 刷新列表
+      } catch (error) {
+        console.error('权限更新失败:', error)
+        this.$message.error('权限更新失败')
       }
     }
   }

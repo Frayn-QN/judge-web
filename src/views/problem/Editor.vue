@@ -41,7 +41,7 @@ import 'codemirror/addon/hint/show-hint'
 import 'codemirror/addon/hint/anyword-hint'
 // 括号补全
 import 'codemirror/addon/edit/closebrackets'
-import 'codemirror/mode/clike/clike.js' // C/C++/Java
+import 'codemirror/mode/clike/clike.js' // C/Cpp/Java
 import 'codemirror/mode/python/python.js' // Python
 import 'codemirror/mode/lua/lua.js' // Lua
 import 'codemirror/mode/verilog/verilog.js' // Verilog

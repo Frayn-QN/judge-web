@@ -49,11 +49,6 @@
                   @add="handleAddExpectation"
                   @remove="handleRemoveExpectation" />
 
-    <file-manager label="附加文件"
-                  :files="formData.extra"
-                  @add="handleAddExtra"
-                  @remove="handleRemoveExtra" />
-
     <!-- 语言选择 -->
     <el-form-item label="支持语言"
                   prop="language"
@@ -67,6 +62,15 @@
         </el-checkbox>
       </el-checkbox-group>
     </el-form-item>
+
+    <!-- 按语言分组的附加文件 -->
+    <div v-for="lang in formData.language"
+         :key="lang">
+      <file-manager :label="`${lang}附加文件`"
+                    :files="formData.extra[lang] || []"
+                    @add="handleAddExtra(lang, $event)"
+                    @remove="handleRemoveExtra(lang, $event)" />
+    </div>
 
     <!-- 限制参数 -->
     <el-form-item label="时间限制（ms）"
@@ -85,7 +89,7 @@
 
     <el-form-item>
       <el-button type="primary"
-                 @click="handleSubmit">提交修改</el-button>
+                 @click="handleSubmit">提交</el-button>
     </el-form-item>
   </el-form>
 </template>
@@ -107,6 +111,7 @@ export default {
       default: true
     }
   },
+
   data () {
     return {
       formData: { ...this.initData },
@@ -114,15 +119,57 @@ export default {
       ProblemLevel
     }
   },
+
   watch: {
     initData: {
       handler (val) {
-        this.formData = { ...val }
+        // 保留已修改的表单数据
+        const mergedData = {
+          ...this.deepClone(val),
+          // 保留用户已做的修改
+          name: this.formData.name || val.name,
+          level: this.formData.level || val.level,
+          content: this.formData.content || val.content,
+          language: this.formData.language || val.language,
+          extra: this.formData.extra || val.extra
+        }
+        this.formData = mergedData
+      },
+      deep: true
+    },
+    'formData.language': {
+      handler (newVal) {
+        this.syncExtraStructure(newVal)
       },
       deep: true
     }
   },
+
   methods: {
+    deepClone (obj) {
+      const cache = new WeakMap()
+      const clone = val => {
+        if (val === null || typeof val !== 'object') return val
+        if (cache.has(val)) return cache.get(val)
+
+        const result = Array.isArray(val)
+          ? val.map(clone)
+          : Object.fromEntries(Object.entries(val).map(([k, v]) => [k, clone(v)]))
+
+        cache.set(val, result)
+        return result
+      }
+      return clone(obj)
+    },
+
+    syncExtraStructure (languages = this.formData.language) {
+      const newExtra = languages.reduce((acc, lang) => {
+        acc[lang] = this.formData.extra[lang] || []
+        return acc
+      }, {})
+      this.formData.extra = { ...newExtra, ...this.formData.extra }
+    },
+
     checkLanguageDisabled (lang) {
       if (this.formData.language.length === 0) return false
 
@@ -135,28 +182,39 @@ export default {
       return fileList.some(file => file.fileName === fileName)
     },
 
-    handleAddExample (file) {
-      if (this.isFileNameDuplicate(file.fileName, this.formData.example)) {
-        this.$message.error('存在重复文件')
+    handleBatchAdd (target, files) {
+      const duplicates = files.filter(file =>
+        this.isFileNameDuplicate(file.fileName, this.formData[target])
+      )
+
+      if (duplicates.length > 0) {
+        this.$message.error(`发现 ${duplicates.length} 个重复文件`)
         return
       }
-      this.formData.example.push(file)
+
+      this.formData[target] = [...this.formData[target], ...files]
+      this.maintainDataConsistency()
     },
 
-    handleAddExpectation (file) {
-      if (this.isFileNameDuplicate(file.fileName, this.formData.expectation)) {
-        this.$message.error('存在重复文件')
-        return
-      }
-      this.formData.expectation.push(file)
+    handleAddExample (files) {
+      this.handleBatchAdd('example', files)
     },
 
-    handleAddExtra (file) {
-      if (this.isFileNameDuplicate(file.fileName, this.formData.extra)) {
-        this.$message.error('存在重复文件')
-        return
-      }
-      this.formData.extra.push(file)
+    handleAddExpectation (files) {
+      this.handleBatchAdd('expectation', files)
+    },
+
+    handleAddExtra (lang, files) {
+      const current = this.formData.extra[lang] || []
+      this.$set(this.formData.extra, lang, [...current, ...files])
+      this.maintainDataConsistency()
+    },
+
+    maintainDataConsistency () {
+      this.$nextTick(() => {
+        this.syncExtraStructure()
+        this.$forceUpdate()
+      })
     },
 
     handleRemoveExample (fileName) {
@@ -171,9 +229,12 @@ export default {
       )
     },
 
-    handleRemoveExtra (fileName) {
-      this.formData.extra = this.formData.extra.filter(
-        f => f.fileName !== fileName
+    handleRemoveExtra (lang, fileName) {
+      const files = this.formData.extra[lang] || []
+      this.$set(
+        this.formData.extra,
+        lang,
+        files.filter(f => f.fileName !== fileName)
       )
     },
 
@@ -215,7 +276,10 @@ export default {
             testCount: exampleNames.length,
             example: this.formatFileList(processedExample),
             expectation: this.formatFileList(processedExpectation),
-            extra: this.formatFileList(this.formData.extra)
+            extra: Object.keys(this.formData.extra).reduce((acc, lang) => {
+              acc[lang] = this.formatFileList(this.formData.extra[lang])
+              return acc
+            }, {})
           }
 
           this.$emit('submit', submitData)
@@ -223,22 +287,20 @@ export default {
       })
     },
 
-    // 辅助方法：验证名称列表是否一致
+    // 验证名称列表是否一致
     areNamesEqual (a, b) {
       return a.length === b.length &&
         a.every((name, idx) => name === b[idx])
     },
 
-    // 辅助方法：处理文件排序和重命名
+    // 处理文件排序和重命名
     processFiles (files, ext, sortedNames) {
       // 创建文件副本
       const filesCopy = files.map(f => ({ ...f }))
 
       // 按原始名称排序
-      filesCopy.sort((f1, f2) => {
-        const name1 = f1.fileName.replace(ext, '')
-        const name2 = f2.fileName.replace(ext, '')
-        return sortedNames.indexOf(name1) - sortedNames.indexOf(name2)
+      filesCopy.sort((a, b) => {
+        return a.fileName.localeCompare(b.fileName, undefined, { numeric: true })
       })
 
       // 重新编号文件名

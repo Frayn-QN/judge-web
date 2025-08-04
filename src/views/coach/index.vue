@@ -16,12 +16,13 @@
                   has-actions
                   @row-click="handleRowClick"
                   @page-change="handlePageChange"
-                  @size-change="handleSizeChange" />
+                  @size-change="handleSizeChange"
+                  @delete="handleDelete" />
   </div>
 </template>
 
   <script>
-import { loadUploaded } from '@/api/problem'
+import { deleteProblem, loadUploaded } from '@/api/problem'
 import ProblemList from '@/components/List/ProblemList.vue'
 
 export default {
@@ -73,6 +74,17 @@ export default {
     handleSizeChange (pageSize) {
       this.page.pageSize = pageSize
       this.fetchData()
+    },
+
+    async handleDelete (problemID) {
+      try {
+        this.loading = true
+        await deleteProblem(problemID)
+        this.fetchData()
+      } catch (error) {
+        console.error('删除题目失败:', error)
+        this.$message.error('删除失败')
+      }
     }
   }
 }

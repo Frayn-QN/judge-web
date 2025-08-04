@@ -48,7 +48,11 @@ export default {
         ...data,
         example: parser(data.example),
         expectation: parser(data.expectation),
-        extra: parser(data.extra)
+        extra: Object.entries(data.extra).reduce((acc, [lang, files]) => {
+          // 对每个语言的附加文件列表进行解析
+          acc[lang] = parser(files)
+          return acc
+        }, {})
       }
     },
 
@@ -62,6 +66,7 @@ export default {
         console.log(formData)
         await modifyProblem(formData)
         this.$message.success('修改成功！')
+        this.$router.push('/coach')
       } catch (error) {
         this.$message.error(`修改失败: ${error.message || '未知错误'}`)
       } finally {

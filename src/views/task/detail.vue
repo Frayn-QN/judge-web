@@ -22,7 +22,7 @@
           </el-tag>
         </div>
         <div>
-          <el-button v-if="shouldConnectWebSocket"
+          <el-button v-if="isTaskRunning"
                      type="danger"
                      size="small"
                      :loading="deleteLoading"
@@ -34,7 +34,8 @@
     </el-card>
 
     <el-descriptions :column="2"
-                     border>
+                     border
+                     class="result-descriptions">
       <el-descriptions-item label="判题时间"
                             width="200">
         {{ formatISO(task.judgeTime) }}
@@ -118,7 +119,7 @@ export default {
       return this.$route.params.id
     },
     formattedResult () {
-      return JSON.stringify(this.task?.result || {}, null, 2)
+      return this.formatResult(this.task.result, this.task.status)
     },
     languageLabel () {
       return Language[this.task.answer.language] || 'Unknown'
@@ -145,7 +146,7 @@ export default {
         this.task = res.data
 
         // 根据状态动态管理WebSocket连接
-        if (this.shouldConnectWebSocket()) {
+        if (this.isTaskRunning()) {
           this.connectWebSocket()
         }
       } catch (error) {
@@ -158,7 +159,7 @@ export default {
     connectWebSocket () {
       if (this.stompClient?.connected) return
 
-      const socket = new SockJS('/ws-task')
+      const socket = new SockJS(process.env.VUE_APP_BASE_API + '/ws-task')
       this.stompClient = new Client({
         webSocketFactory: () => socket,
         reconnectDelay: 5000,
@@ -190,15 +191,16 @@ export default {
         ...updateData,
         answer: { ...this.task.answer, ...updateData.answer }
       }
+      //   window.location.reload(true)
 
-      // 状态完成后断开连接
-      if (!this.shouldConnectWebSocket()) {
+      // 完成后断开连接
+      if (!this.isTaskRunning()) {
         this.disconnectWebSocket()
       }
     },
 
-    // 判断是否需要保持连接
-    shouldConnectWebSocket () {
+    // 判断测评是否正在运行，是则需要保持连接
+    isTaskRunning () {
       return [
         TaskStatus.COMPILING,
         TaskStatus.EXECUTING
@@ -236,19 +238,28 @@ export default {
           this.deleteLoading = true
           await deleteTask(this.task.id)
           this.$message.success('删除成功')
-          this.$router.replace('/task') // 跳转到任务列表
+          this.$router.back() // 跳转到任务列表
         })
       } catch (error) {
         this.$message.error(`删除失败: ${error.message}`)
       } finally {
         this.deleteLoading = false
       }
+    },
+    formatResult (result, status) {
+      if (['AC', 'WA'].includes(status)) {
+        const accept = result?.accept ?? 'N/A'
+        const wrong = result?.wrong ?? 'N/A'
+        const total = result?.total ?? 'N/A'
+        return `通过数：${accept}\n错误数：${wrong}\n总数：${total}`
+      }
+      return result?.msg ?? JSON.stringify(result || {}, null, 2)
     }
   }
 }
-  </script>
+</script>
 
-  <style scoped>
+<style scoped>
 .task-container {
   padding: 24px;
   background: #f5f7fa;

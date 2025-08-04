@@ -298,9 +298,10 @@ export default {
           type: 'warning'
         })
 
-        const res = await favorite(this.pset.id, !this.isCollected)
-        this.isCollected = res.data.collected
+        await favorite(this.pset.id, !this.isCollected)
         this.$message.success(`${action}成功`)
+        // refresh
+        window.location.reload()
       } catch (error) {
         if (error !== 'cancel') {
           this.$message.error(`操作失败: ${error.message}`)

@@ -35,6 +35,28 @@
         </template>
       </el-table-column>
 
+      <!-- 权限列 -->
+      <el-table-column v-if="showAuthority"
+                       label="用户权限"
+                       width="150">
+        <template slot-scope="{row}">
+          <span>{{ formatAuthority(row.authority) }}</span>
+        </template>
+      </el-table-column>
+
+      <!-- 权限修改按钮列 -->
+      <el-table-column v-if="showAuthority"
+                       label="权限管理"
+                       width="120">
+        <template slot-scope="{row}">
+          <el-button type="primary"
+                     size="mini"
+                     @click.stop="$emit('authority', row.id)">
+            修改权限
+          </el-button>
+        </template>
+      </el-table-column>
+
       <!-- 封禁操作列 -->
       <el-table-column v-if="showBan"
                        label="状态管理"
@@ -61,7 +83,8 @@
   </div>
 </template>
 
-  <script>
+<script>
+import { UserAuth } from '@/entity/enums'
 import { picSrc } from '@/utils/page'
 
 export default {
@@ -70,7 +93,7 @@ export default {
       type: Array,
       default: () => []
     },
-    editable: Boolean, // 旧版兼容参数
+    editable: Boolean,
     selectable: Boolean, // 是否显示选择列
     clickable: Boolean, // 是否启用行点击
     removable: { // 是否显示删除按钮（覆盖editable）
@@ -78,6 +101,10 @@ export default {
       default: undefined
     },
     ban: {
+      type: Boolean,
+      default: false
+    },
+    authority: {
       type: Boolean,
       default: false
     },
@@ -107,6 +134,9 @@ export default {
     },
     showBan () {
       return this.ban !== undefined ? this.ban : this.editable
+    },
+    showAuthority () {
+      return this.authority !== undefined ? this.ban : this.editable
     }
   },
 
@@ -136,6 +166,15 @@ export default {
         pageNum: val,
         pageSize: this.pageSize
       })
+    },
+
+    formatAuthority (auth) {
+      const map = {
+        [UserAuth.User]: '用户',
+        [UserAuth.Coach]: '教练',
+        [UserAuth.Admin]: '管理员'
+      }
+      return map[auth] || '未知权限'
     }
   }
 }

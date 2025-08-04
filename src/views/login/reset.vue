@@ -32,7 +32,7 @@
       <el-form-item prop="verifyCode">
         <span class="svg-container"><svg-icon icon-class="example" /></span>
         <el-input ref="verifyCode"
-                  v-model="form.verifyCode"
+                  v-model="form.code"
                   name="verifyCode"
                   placeholder="验证码"
                   type="text"
@@ -102,9 +102,9 @@ export default {
 
       this.emailCheckLoading = true
       checkEmail(value).then(response => {
-        this.isEmailAvailable = response.data
-        if (!response.data) {
-          callback(new Error('该邮箱已被注册'))
+        this.isEmailAvailable = !response.data
+        if (response.data) {
+          callback(new Error('不存在该用户'))
         } else {
           callback() // 验证通过
         }
@@ -207,6 +207,7 @@ export default {
 
             .then(() => {
               this.loading = false
+              this.$message.success('重置成功')
               this.$router.back()
             })
             .catch((error) => {
@@ -227,7 +228,7 @@ export default {
           return
         }
 
-        await sendVerification(this.registerForm.email)
+        await sendVerification(this.form.email)
         this.$message.success('验证码已发送')
 
         // 开始倒计时

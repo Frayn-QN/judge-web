@@ -46,7 +46,7 @@ export const ProblemLevel = {
 
 export const Language = {
   C: "C",
-  Cpp: "C++",
+  Cpp: "Cpp",
   Java: "Java",
   Python: "Python",
   Lua: "Lua",

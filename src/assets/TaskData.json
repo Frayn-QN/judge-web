@@ -32,14 +32,24 @@
             "msg": "msgStr"
         }
     },
-    "extra": [
-        {
-            "_file_name_0": "Base64Str"
-        },
-        {
-            "_file_name_1": "Base64Str"
-        }
-    ],
+    "extra": {
+        "languageStr_0": [
+            {
+                "_file_name_0": "Base64Str"
+            },
+            {
+                "_file_name_1": "Base64Str"
+            }
+        ],
+        "languageStr_1": [
+            {
+                "_file_name_0": "Base64Str"
+            },
+            {
+                "_file_name_1": "Base64Str"
+            }
+        ]
+    },
     "example": [
         {
             "_file_name_0": "Base64Str"

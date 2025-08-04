@@ -7,8 +7,8 @@
              auto-complete="on"
              label-position="left">
       <div class="title-container">
-        <h3 class="title">青鸟在线代码测评系统</h3>
-        <h3 class="title">QingNiao Online Code Judge</h3>
+        <h3 class="title">在线代码测评系统</h3>
+        <h3 class="title">Online Code Judge</h3>
       </div>
 
       <el-form-item prop="email">
@@ -141,6 +141,7 @@ export default {
             .dispatch('user/login', this.loginForm)
             .then(() => {
               this.$router.push({ path: this.redirect || '/' })
+              this.$message.success('登录成功')
               this.loading = false
             })
             .catch((error) => {

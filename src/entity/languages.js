@@ -35,7 +35,7 @@ int main() {
   },
 
   [Language.Cpp]: {
-    label: "C++",
+    label: "Cpp",
     mode: "text/x-c++src",
     template: `#include <iostream>
 using namespace std;

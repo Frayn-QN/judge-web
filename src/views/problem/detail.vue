@@ -54,24 +54,7 @@ export default {
         content: '',
         timeLimit: 1000,
         memoryLimit: 256
-      },
-      code: '// 在这里编写你的代码\n',
-      currentLanguage: 'java',
-      languageOptions: [
-        { value: 'java', label: 'Java' },
-        { value: 'cpp', label: 'C++' },
-        { value: 'python', label: 'Python 3' }
-      ],
-      editorOptions: {
-        tabSize: 4,
-        mode: 'text/x-java',
-        theme: 'monokai',
-        lineNumbers: true,
-        lineWrapping: true,
-        matchBrackets: true,
-        extraKeys: { 'Ctrl-Space': 'autocomplete' }
-      },
-      submitting: false
+      }
     }
   },
   created () {

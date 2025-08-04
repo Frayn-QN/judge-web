@@ -46,7 +46,7 @@ export function changeUserAuth(targetID, authority) {
     url: "/user/auth",
     method: "POST",
     data: {
-      targetID,
+      id: targetID,
       authority,
     },
   });
